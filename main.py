@@ -1,109 +1,135 @@
+"""
+
+"""
+# Core Pkgs
 import streamlit as st 
-import numpy as np 
+import os
 
-import matplotlib.pyplot as plt
-from sklearn import datasets
-from sklearn.model_selection import train_test_split
+# NLTK utils
+import nltk_download_utils
 
-from sklearn.decomposition import PCA
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
+# NLP Pkgs
+from textblob import TextBlob 
+import spacy
+from gensim.summarization import summarize
 
-from sklearn.metrics import accuracy_score
+# Sumy Summary Pkg
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lex_rank import LexRankSummarizer
 
-st.title('Streamlit Example')
 
-st.write("""
-# Explore different classifier and datasets
-Which one is the best?
-""")
+# Function for Sumy Summarization
+def sumy_summarizer(docx):
+	parser = PlaintextParser.from_string(docx,Tokenizer("english"))
+	lex_summarizer = LexRankSummarizer()
+	summary = lex_summarizer(parser.document,3)
+	summary_list = [str(sentence) for sentence in summary]
+	result = ' '.join(summary_list)
+	return result
 
-dataset_name = st.sidebar.selectbox(
-    'Select Dataset',
-    ('Iris', 'Breast Cancer', 'Wine')
-)
+# Function to Analyse Tokens and Lemma
+@st.cache
+def text_analyzer(my_text):
+	nlp = spacy.load('en_core_web_sm')
+	docx = nlp(my_text)
+	# tokens = [ token.text for token in docx]
+	allData = [('"Token":{},\n"Lemma":{}'.format(token.text,token.lemma_))for token in docx ]
+	return allData
 
-st.write(f"## {dataset_name} Dataset")
+# Function For Extracting Entities
+@st.cache
+def entity_analyzer(my_text):
+	nlp = spacy.load('en_core_web_sm')
+	docx = nlp(my_text)
+	tokens = [ token.text for token in docx]
+	entities = [(entity.text,entity.label_)for entity in docx.ents]
+	allData = ['"Token":{},\n"Entities":{}'.format(tokens,entities)]
+	return allData
 
-classifier_name = st.sidebar.selectbox(
-    'Select classifier',
-    ('KNN', 'SVM', 'Random Forest')
-)
+        
+# genre = st.radio("Which operation do you want to make?", ["Show Tokens and Lemma", "Show Named Entities", 
+# "Show Sentiment Analysis", "Show Text Summarization"])
 
-def get_dataset(name):
-    data = None
-    if name == 'Iris':
-        data = datasets.load_iris()
-    elif name == 'Wine':
-        data = datasets.load_wine()
-    else:
-        data = datasets.load_breast_cancer()
-    X = data.data
-    y = data.target
-    return X, y
+def main():
+	""" NLP Based App with Streamlit """
 
-X, y = get_dataset(dataset_name)
-st.write('Shape of dataset:', X.shape)
-st.write('number of classes:', len(np.unique(y)))
+	# Title
+	st.title("NLPiffy with Streamlit")
+	st.subheader("Natural Language Processing On the Go..")
+	st.markdown("""
+    	#### Description
+    	+ This is a Natural Language Processing(NLP) Based App useful for basic NLP task
+    	Tokenization, NER, Sentiment, Summarization
+    	""")
 
-def add_parameter_ui(clf_name):
-    params = dict()
-    if clf_name == 'SVM':
-        C = st.sidebar.slider('C', 0.01, 10.0)
-        params['C'] = C
-    elif clf_name == 'KNN':
-        K = st.sidebar.slider('K', 1, 15)
-        params['K'] = K
-    else:
-        max_depth = st.sidebar.slider('max_depth', 2, 15)
-        params['max_depth'] = max_depth
-        n_estimators = st.sidebar.slider('n_estimators', 1, 100)
-        params['n_estimators'] = n_estimators
-    return params
+	genre = st.radio("Which operation do you want to make?", ["Show Tokens and Lemma", "Show Named Entities", 
+	"Show Sentiment Analysis", "Show Text Summarization"])
 
-params = add_parameter_ui(classifier_name)
+	# Tokenization
+	# if st.radio("Show Tokens and Lemma"):
+	if genre == "Show Tokens and Lemma":
+		st.subheader("Tokenize Your Text")
 
-def get_classifier(clf_name, params):
-    clf = None
-    if clf_name == 'SVM':
-        clf = SVC(C=params['C'])
-    elif clf_name == 'KNN':
-        clf = KNeighborsClassifier(n_neighbors=params['K'])
-    else:
-        clf = clf = RandomForestClassifier(n_estimators=params['n_estimators'], 
-            max_depth=params['max_depth'], random_state=1234)
-    return clf
+		message = st.text_area("Enter Text","Type Here ..")
+		if st.button("Analyze"):
+			nlp_result = text_analyzer(message)
+			st.json(nlp_result)
 
-clf = get_classifier(classifier_name, params)
-#### CLASSIFICATION ####
+	# Entity Extraction
+	# if st.radio("Show Named Entities"):
+	if genre == "Show Named Entities":
+		st.subheader("Analyze Your Text")
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1234)
+		message = st.text_area("Enter Text","Type Here ..")
+		if st.button("Extract"):
+			entity_result = entity_analyzer(message)
+			st.json(entity_result)
 
-clf.fit(X_train, y_train)
-y_pred = clf.predict(X_test)
+	# Sentiment Analysis
+	# if st.radio("Show Sentiment Analysis"):
+	if genre == "Show Sentiment Analysis":
+		st.subheader("Analyse Your Text")
 
-acc = accuracy_score(y_test, y_pred)
+		message = st.text_area("Enter Text","Type Here ..")
+		if st.button("Analyze"):
+			blob = TextBlob(message)
+			result_sentiment = blob.sentiment
+			st.success(result_sentiment)
 
-st.write(f'Classifier = {classifier_name}')
-st.write(f'Accuracy =', acc)
+	# Summarization
+	# if st.radio("Show Text Summarization"):
+	if genre == "Show Text Summarization":
+		st.subheader("Summarize Your Text")
 
-#### PLOT DATASET ####
-# Project the data onto the 2 primary principal components
-pca = PCA(2)
-X_projected = pca.fit_transform(X)
+		message = st.text_area("Enter Text","Type Here ..")
+		summary_options = st.selectbox("Choose Summarizer",['sumy','gensim'])
+		if st.button("Summarize"):
+			if summary_options == 'sumy':
+				st.text("Using Sumy Summarizer ..")
+				summary_result = sumy_summarizer(message)
+			elif summary_options == 'gensim':
+				st.text("Using Gensim Summarizer ..")
+				summary_result = summarize(message)
+			else:
+				st.warning("Using Default Summarizer")
+				st.text("Using Gensim Summarizer ..")
+				summary_result = summarize(message)
 
-x1 = X_projected[:, 0]
-x2 = X_projected[:, 1]
+		
+			st.success(summary_result)
 
-fig = plt.figure()
-plt.scatter(x1, x2,
-        c=y, alpha=0.8,
-        cmap='viridis')
 
-plt.xlabel('Principal Component 1')
-plt.ylabel('Principal Component 2')
-plt.colorbar()
 
-#plt.show()
-st.pyplot(fig)
+	st.sidebar.subheader("About App")
+	st.sidebar.text("NLP App with Streamlit")
+	# st.sidebar.info("Cudos to the Streamlit Team")
+	
+
+	st.sidebar.subheader("By")
+	st.sidebar.text("Tom Islam")
+	st.sidebar.text("Inspiration from Jesus \nsaves@JCharisTech")
+	
+
+if __name__ == '__main__':
+	main()
